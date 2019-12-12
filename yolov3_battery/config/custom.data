@@ -1,0 +1,8 @@
+classes= 2
+train=data/custom/train.txt
+valid=data/custom/valid.txt
+names=data/custom/classes.names
+test=/Users/wangxiaodong/Downloads/Safari下载/MachineLearningProject-master/机器学习大作业/样本不均衡/test.txt
+image_path=/Users/wangxiaodong/Desktop/PyTorch-YOLOv3/data/custom/images
+label_path=/Users/wangxiaodong/Downloads/Safari下载/MachineLearningProject-master/机器学习大作业/样本不均衡/test
+
