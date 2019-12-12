@@ -113,7 +113,11 @@ if __name__ == "__main__":
         model.load_darknet_weights(opt.weights_path) #载入darknet参数
     else:
         # Load checkpoint weights
-        model.load_state_dict(torch.load(opt.weights_path)) #载入普通参数
+        if torch.cuda.is_available():
+            model.load_state_dict(torch.load(opt.weights_path)) #载入普通参数
+        else:
+            model.load_state_dict(torch.load(opt.weights_path,map_location=lambda storage, loc: storage))
+       
 
     print("Compute mAP...") #计算mAP
 
