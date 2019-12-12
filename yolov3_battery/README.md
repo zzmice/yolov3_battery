@@ -8,7 +8,7 @@
     $ sudo pip3 install -r requirements.txt
     
 ## 下载模型
-    (这是一个模型地址）
+    https://bhpan.buaa.edu.cn:443/link/EE9F98022AC3E5D320D8E8722338148C
 
 ## 测试准备
 
