@@ -22,7 +22,7 @@
 ## 开始测试
 使用命令行代码
     $ python3 train.py --weights_path 下载好的模型路径
-或者直接运行test.py文件即可
+
 
 
 
