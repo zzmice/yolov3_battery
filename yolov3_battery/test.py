@@ -1,5 +1,4 @@
 from __future__ import division
-from draw import detect
 from models import *
 from utils.utils import *
 from utils.datasets import *
@@ -34,18 +33,21 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=batch_size, shuffle=False, num_workers=1, collate_fn=dataset.collate_fn
     )
-
+    imgs1 = []  # Stores image paths
+    img_detections = []  # Stores detections for each image index
     print("ok")
     Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
     labels = []
     sample_metrics = []  # List of tuples (TP, confs, pred)
-    for batch_i, (_, imgs, targets) in enumerate(tqdm.tqdm(dataloader, desc="Detecting objects")):
+    for batch_i, (img_paths, imgs, targets) in enumerate(tqdm.tqdm(dataloader, desc="Detecting objects")):
         # print(targets)
         # Extract labels
         labels += targets[:, 1].tolist()
         # Rescale target
         targets[:, 2:] = xywh2xyxy(targets[:, 2:])
+        targets[:, 2:][targets[:, 2:]<0]=0
+        targets[:, 2:][targets[:, 2:]>1]=1
         targets[:, 2:] *= img_size
 
         imgs = Variable(imgs.type(Tensor), requires_grad=False)
@@ -53,6 +55,8 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
         with torch.no_grad():
             outputs = model(imgs)
             outputs = non_max_suppression(outputs, conf_thres=conf_thres, nms_thres=nms_thres)
+        imgs1.extend(img_paths)
+        img_detections.extend(outputs)
 
         sample_metrics += get_batch_statistics(outputs, targets, iou_threshold=iou_thres)
 
@@ -63,7 +67,7 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
     # for i in range(len(true_positives)):
     #     print(true_positives[i], pred_scores[i], pred_labels[i])
     precision, recall, AP, f1, ap_class = ap_per_class(true_positives, pred_scores, pred_labels, labels)
-    return precision, recall, AP, f1, ap_class
+    return imgs1,img_detections,precision, recall, AP, f1, ap_class
 # def make_test_path(dir,txt_path):
 #     """
 #
@@ -106,7 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=2, help="size of each image batch")
     parser.add_argument("--model_def", type=str, default="config/yolov3-custom.cfg", help="path to model definition file")
     parser.add_argument("--data_config", type=str, default="config/custom.data", help="path to data config file")
-    parser.add_argument("--weights_path", type=str, default="yolov3_ckpt_1.pth", help="path to weights file")
+    parser.add_argument("--weights_path", type=str, default="/Users/wangxiaodong/Desktop/yolov3_battery-master/yolov3_battery/yolov3_ckpt_1.pth", help="path to weights file")
     # parser.add_argument("--weights_path", type=str, default="battery_yolov3.weights", help="path to weights file")
     #    parser.add_argument("--weights_path", type=str, default="weights/yolov3.weights", help="path to weights file")
     parser.add_argument("--class_path", type=str, default="data/custom/classes.names", help="path to class label file")
@@ -115,8 +119,8 @@ if __name__ == "__main__":
     parser.add_argument("--nms_thres", type=float, default=0.5, help="iou thresshold for non-maximum suppression")
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
-    parser.add_argument("--image_path", type=str, default='/Users/wangxiaodong/Desktop/test/Image_test', help="image path")
-    parser.add_argument("--label_path", type=str, default='/Users/wangxiaodong/Desktop/test/Anno_test', help="Annotation path")
+    parser.add_argument("--image_path", type=str, default='/Users/wangxiaodong/Desktop/test/Image', help="image path")
+    parser.add_argument("--label_path", type=str, default='/Users/wangxiaodong/Desktop/test/Anno', help="Annotation path")
     opt = parser.parse_args()
     # print(opt)
 
@@ -148,7 +152,7 @@ if __name__ == "__main__":
 
     print("Compute mAP...") #计算mAP
 
-    precision, recall, AP, f1, ap_class = evaluate(
+    imgs, img_detections,precision, recall, AP, f1, ap_class = evaluate(
         model,
         path=valid_path,
         iou_thres=opt.iou_thres,
@@ -164,19 +168,9 @@ if __name__ == "__main__":
 
     print(f"mAP: {AP.mean()}") #计算平均AP
     # compute coordinates of boxes
-    imgs, img_detections = detect(
-                                  model=model,
-                                  path=image_path,
-                                  conf_thres=opt.conf_thres,
-                                  nms_thres=opt.nms_thres,
-                                  img_size=opt.img_size,
-                                  batch_size=8,
-                                  n_cpu=8,
-                                  device=device,
-                                  )
-        
+
     os.makedirs('predicted_file', exist_ok=True)
-        
+
     class1 = open('predicted_file/det_test_core.txt', 'w')
     class2 = open('predicted_file/det_test_coreless.txt', 'w')
     for path, boxes in zip(imgs, img_detections):
