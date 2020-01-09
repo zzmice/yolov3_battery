@@ -14,13 +14,13 @@ import torchvision.transforms as transforms
 
 def pad_to_square(img, pad_value):
     c, h, w = img.shape
-    dim_diff = np.abs(h - w)
+    dim_diff = np.abs(h - w) #获得长和宽的差值
     # (upper / left) padding and (lower / right) padding
     pad1, pad2 = dim_diff // 2, dim_diff - dim_diff // 2
     # Determine padding
     pad = (0, 0, pad1, pad2) if h <= w else (pad1, pad2, 0, 0)
     # Add padding
-    img = F.pad(img, pad, "constant", value=pad_value)
+    img = F.pad(img, pad, "constant", value=pad_value) #往图片中填充像素
 
     return img, pad
 
@@ -57,21 +57,23 @@ class ImageFolder(Dataset):
 
 
 class ListDataset(Dataset):
-    def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True):
+    def __init__(self, list_path,img_size=416, augment=True, multiscale=True, normalized_labels=True):
         with open(list_path, "r") as file:
-            self.img_files = file.readlines()
-
+            self.img_files = file.readlines() #获得图片地址
+        self.image_name=[os.path.split(path)[1].replace(".jpg","").replace('core_','').replace('coreless_','') for path in self.img_files]
         self.label_files = [
-            path.replace("images", "labels").replace(".png", ".txt").replace(".jpg", ".txt")
+            'data/custom/labels'+os.sep+os.path.split(path)[1].replace(".jpg", ".txt")
             for path in self.img_files
-        ]
+        ] #获得标签地址
+
         self.img_size = img_size
         self.max_objects = 100
+        self.orl_size=[]
         self.augment = augment
         self.multiscale = multiscale
         self.normalized_labels = normalized_labels
-        self.min_size = self.img_size - 3 * 32
-        self.max_size = self.img_size + 3 * 32
+        self.min_size = self.img_size - 3 * 32 #最小尺寸
+        self.max_size = self.img_size + 3 * 32 #最大尺寸
         self.batch_count = 0
 
     def __getitem__(self, index):
@@ -80,71 +82,76 @@ class ListDataset(Dataset):
         #  Image
         # ---------
 
-        img_path = self.img_files[index % len(self.img_files)].rstrip()
+        img_path = self.img_files[index % len(self.img_files)].rstrip() #获得第index张图片
 
         # Extract image as PyTorch tensor
-        img = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
+        img = transforms.ToTensor()(Image.open(img_path).convert('RGB')) #用RGB格式读入图片
 
         # Handle images with less than three channels
         if len(img.shape) != 3:
             img = img.unsqueeze(0)
-            img = img.expand((3, img.shape[1:]))
+            img = img.expand((3, img.shape[1:])) #增加通道数，扩充成三通道
 
         _, h, w = img.shape
-        h_factor, w_factor = (h, w) if self.normalized_labels else (1, 1)
+        self.orl_size.append([h,w])
+        # print(self.orl_size)
+        h_factor, w_factor = (h, w) if self.normalized_labels else (1, 1) #原图的高和宽
         # Pad to square resolution
-        img, pad = pad_to_square(img, 0)
-        _, padded_h, padded_w = img.shape
+        img, pad = pad_to_square(img, 0) #向图片中添加像素
+        _, padded_h, padded_w = img.shape #填充后的h，w
 
         # ---------
         #  Label
         # ---------
 
-        label_path = self.label_files[index % len(self.img_files)].rstrip()
+        label_path = self.label_files[index % len(self.img_files)].rstrip() #获得标签
 
         targets = None
         if os.path.exists(label_path):
-            boxes = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 5))
+            boxes = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 5)) #boxes为标签列表
             # Extract coordinates for unpadded + unscaled image
             x1 = w_factor * (boxes[:, 1] - boxes[:, 3] / 2)
             y1 = h_factor * (boxes[:, 2] - boxes[:, 4] / 2)
             x2 = w_factor * (boxes[:, 1] + boxes[:, 3] / 2)
-            y2 = h_factor * (boxes[:, 2] + boxes[:, 4] / 2)
+            y2 = h_factor * (boxes[:, 2] + boxes[:, 4] / 2) #获得x1，y1，x2，y2，这是本来就有的数据
             # Adjust for added padding
+
             x1 += pad[0]
             y1 += pad[2]
             x2 += pad[1]
-            y2 += pad[3]
+            y2 += pad[3] #求添加空白后的x1，y1，x2，y2
             # Returns (x, y, w, h)
             boxes[:, 1] = ((x1 + x2) / 2) / padded_w
             boxes[:, 2] = ((y1 + y2) / 2) / padded_h
-            boxes[:, 3] *= w_factor / padded_w
+            boxes[:, 3] *= w_factor / padded_w #求填充后的w，h
             boxes[:, 4] *= h_factor / padded_h
 
-            targets = torch.zeros((len(boxes), 6))
-            targets[:, 1:] = boxes
+            targets = torch.zeros((len(boxes), 6)) #目标等于标签的数量
+            targets[:, 1:] = boxes #中间5个相同
 
         # Apply augmentations
-        if self.augment:
+        if self.augment: #不添加噪声
             if np.random.random() < 0.5:
                 img, targets = horisontal_flip(img, targets)
 
-        return img_path, img, targets
+        return img_path, img, targets #返回图片位置，填充后的图片和targets
 
     def collate_fn(self, batch):
         paths, imgs, targets = list(zip(*batch))
         # Remove empty placeholder targets
-        targets = [boxes for boxes in targets if boxes is not None]
+        targets = [boxes for boxes in targets if boxes is not None] #把空的框去掉
         # Add sample index to targets
         for i, boxes in enumerate(targets):
-            boxes[:, 0] = i
-        targets = torch.cat(targets, 0)
+            boxes[:, 0] = i #targets的第一项为他的计数
+        targets = torch.cat(targets, 0) #将targets进行组合
         # Selects new image size every tenth batch
         if self.multiscale and self.batch_count % 10 == 0:
             self.img_size = random.choice(range(self.min_size, self.max_size + 1, 32))
         # Resize images to input shape
-        imgs = torch.stack([resize(img, self.img_size) for img in imgs])
+        # print(imgs)
+        imgs = torch.stack([resize(img, self.img_size) for img in imgs]) #将图片进行组合
         self.batch_count += 1
+
         return paths, imgs, targets
 
     def __len__(self):

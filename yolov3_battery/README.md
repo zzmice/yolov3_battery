@@ -8,21 +8,15 @@
     $ sudo pip3 install -r requirements.txt
     
 ## 下载模型
-    https://bhpan.buaa.edu.cn:443/link/EE9F98022AC3E5D320D8E8722338148C
-
-## 测试准备
-
-打开"/config/custom.data,
-将test设置为测试集使用的图片名，内容格式举例："coreless00000001"
-将image_path设置为图片所在路径
-将label_path设置为图片所需要的标注文件路径
+    https://bhpan.buaa.edu.cn:443/link/3A5966021CEAA0E120AB3EC426A36673
 
 
 
 ## 开始测试
 使用命令行代码
-    $ python3 test.py --weights_path (+下载好的模型路径)
-
+    $ python3 test.py --weights_path (+下载好的模型路径) --image_path(+测试图片路径) --label_path (+标签路径）
+输出结果位于predicted_file文件夹中
+   
 
 
 
